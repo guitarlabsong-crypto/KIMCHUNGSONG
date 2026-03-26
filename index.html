@@ -3,37 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>블록 얼간이: 완성판</title>
+    <title>블록 얼간이: 아이템전</title>
     <style>
         body {
             margin: 0; overflow: hidden;
-            background-color: #7d5fff; /* 좀 더 진한 보라색 */
+            background-color: #f0f2f5;
             font-family: 'Courier New', Courier, monospace;
             touch-action: none; user-select: none; -webkit-user-select: none;
         }
-        canvas { display: block; }
+        canvas { display: block; z-index: 1; position: relative; }
         #watermark {
             position: fixed; top: 50%; left: 50%;
             transform: translate(-50%, -50%) rotate(-30deg);
-            font-size: 10vw; color: rgba(255, 255, 255, 0.08);
-            pointer-events: none; white-space: nowrap; font-weight: bold;
+            font-size: 12vw; color: rgba(0, 0, 0, 0.05);
+            pointer-events: none; white-space: nowrap; font-weight: bold; z-index: 0;
         }
         #ui {
             position: fixed; top: 20px; width: 100%;
             text-align: center; pointer-events: none; z-index: 10;
         }
         .status {
-            display: inline-block;
-            background: rgba(0, 0, 0, 0.6);
-            color: #fff; padding: 10px 20px;
-            border: 3px solid #fff; font-weight: bold;
+            display: inline-block; background: rgba(0, 0, 0, 0.7);
+            color: #fff; padding: 8px 16px; border: 2px solid #fff; font-size: 13px;
         }
     </style>
 </head>
 <body>
 
-<div id="watermark">BLOCK IDIOTS</div>
-<div id="ui"><div class="status" id="statusMsg">팔다리를 흔들며 걷는 친구들을 드래그해보세요!</div></div>
+<div id="watermark">세얼간이</div>
+<div id="ui"><div class="status" id="statusMsg">바나나 껍질을 조심하세요!</div></div>
 <canvas id="gameCanvas"></canvas>
 
 <script>
@@ -47,15 +45,22 @@
     window.addEventListener('resize', resize);
     resize();
 
+    // --- 사운드 제어 (중첩 오류 방지) ---
     let audioCtx = null;
-    function playSound(freq) {
+    let lastSoundTime = 0;
+    function playSound(freq, type = 'square') {
+        const now = Date.now();
+        if (now - lastSoundTime < 100) return; // 0.1초 이내 연속 재생 차단
+        lastSoundTime = now;
+
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         if (audioCtx.state === 'suspended') audioCtx.resume();
+        
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
-        osc.type = 'square'; // 픽셀 느낌 사운드
+        osc.type = type;
         osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.03, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
         osc.connect(gain);
         gain.connect(audioCtx.destination);
@@ -63,8 +68,12 @@
         osc.stop(audioCtx.currentTime + 0.1);
     }
 
-    // --- 입체 블록 그리기 ---
-    function drawCube(x, y, w, h, d, color) {
+    // --- 공통 블록 그리기 ---
+    function drawCube(x, y, w, h, d, color, rotation = 0) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(rotation);
+
         const adjust = (col, amt) => {
             let r = parseInt(col.substring(1, 3), 16);
             let g = parseInt(col.substring(3, 5), 16);
@@ -72,141 +81,154 @@
             return `rgb(${Math.max(0,Math.min(255,r+amt))},${Math.max(0,Math.min(255,g+amt))},${Math.max(0,Math.min(255,b+amt))})`;
         };
 
-        ctx.save();
-        ctx.translate(x, y);
-
         // 윗면
-        ctx.fillStyle = adjust(color, 40);
+        ctx.fillStyle = adjust(color, 30);
         ctx.beginPath();
         ctx.moveTo(-w/2, -h/2); ctx.lineTo(-w/2+d, -h/2-d); ctx.lineTo(w/2+d, -h/2-d); ctx.lineTo(w/2, -h/2);
         ctx.fill();
-
         // 옆면
-        ctx.fillStyle = adjust(color, -40);
+        ctx.fillStyle = adjust(color, -30);
         ctx.beginPath();
         ctx.moveTo(w/2, -h/2); ctx.lineTo(w/2+d, -h/2-d); ctx.lineTo(w/2+d, h/2-d); ctx.lineTo(w/2, h/2);
         ctx.fill();
-
         // 앞면
         ctx.fillStyle = color;
         ctx.fillRect(-w/2, -h/2, w, h);
-
         ctx.restore();
     }
 
+    // --- 아이템 클래스 (바나나) ---
+    class Item {
+        constructor() {
+            this.reset();
+        }
+        reset() {
+            this.x = Math.random() * (canvas.width - 60) + 30;
+            this.y = Math.random() * (canvas.height - 100) + 50;
+            this.type = 'banana';
+            this.active = true;
+        }
+        draw() {
+            if(!this.active) return;
+            // 노란색 바나나 껍질 모양 블록
+            drawCube(this.x, this.y, 15, 5, 5, "#f1c40f");
+            drawCube(this.x-5, this.y+2, 8, 3, 3, "#f1c40f", 0.5);
+            drawCube(this.x+5, this.y+2, 8, 3, 3, "#f1c40f", -0.5);
+        }
+    }
+
+    let items = [new Item(), new Item()];
+
+    // --- 캐릭터 클래스 ---
     class Character {
-        constructor(name, x, y, skin, type) {
+        constructor(name, x, y, type) {
             this.name = name; this.x = x; this.y = y;
-            this.dx = (Math.random()-0.5)*2; this.dy = (Math.random()-0.5)*2;
-            this.skin = skin; this.type = type;
+            this.dx = (Math.random()-0.5)*1.5; this.dy = (Math.random()-0.5)*1.5;
+            this.skin = "#ffe0bd"; this.type = type;
             this.hairCount = 1; this.isDragging = false;
             this.shock = 0; this.anim = 0;
+            this.spinAngle = 0; // 빙글빙글 회전각
+            this.isSpinning = false;
+            this.radius = 25; // 사이즈 축소 반영
         }
 
         draw() {
             ctx.save();
             ctx.translate(this.x, this.y);
+            
+            // 빙글빙글 효과 적용
+            if (this.isSpinning) {
+                this.spinAngle += 0.3;
+                ctx.rotate(this.spinAngle);
+                if(this.spinAngle > Math.PI * 4) { // 두 바퀴 돌면 정지
+                    this.isSpinning = false;
+                    this.spinAngle = 0;
+                }
+            }
 
-            let speed = Math.hypot(this.dx, this.dy);
-            let swing = (speed > 0.2 && !this.isDragging) ? Math.sin(this.anim += 0.15) * 15 : 0;
+            let swing = (Math.hypot(this.dx, this.dy) > 0.1 && !this.isDragging) ? Math.sin(this.anim += 0.15) * 10 : 0;
 
-            // 1. 다리 (걷기 애니메이션)
-            drawCube(-12, 35 + swing, 12, 25, 8, "#333333"); // 왼다리
-            drawCube(12, 35 - swing, 12, 25, 8, "#333333");  // 오른다리
+            // 1. 다리 (축소된 사이즈)
+            drawCube(-8, 25 + swing, 8, 18, 5, "#333333");
+            drawCube(8, 25 - swing, 8, 18, 5, "#333333");
 
             // 2. 몸통
             let bodyCol = this.type === 'lee' ? "#3498db" : (this.type === 'kim' ? "#e84118" : "#2ecc71");
-            drawCube(0, 5, 40, 50, 10, bodyCol);
+            drawCube(0, 5, 30, 35, 8, bodyCol);
 
-            // 3. 팔 (흔들기 애니메이션 + 액세서리)
-            // 왼팔 (다리와 반대로 흔들림)
-            ctx.save();
-            let leftArmSwing = -swing;
-            drawCube(-28, 5 + leftArmSwing, 10, 35, 6, this.skin);
-            // Mr. SONG의 스마트워치 (왼팔에 착용)
-            if(this.type === 'song') drawCube(-28, 15 + leftArmSwing, 12, 8, 4, "#2f3542");
-            ctx.restore();
-
-            // 오른팔
-            ctx.save();
-            let rightArmSwing = swing;
-            drawCube(28, 5 + rightArmSwing, 10, 35, 6, this.skin);
-            // Mr. KIM의 팔찌 (오른팔에 착용)
-            if(this.type === 'kim') drawCube(28, 15 + rightArmSwing, 12, 5, 4, "#fbc531");
-            ctx.restore();
+            // 3. 팔
+            drawCube(-20, 5 - swing, 7, 25, 4, this.skin);
+            drawCube(20, 5 + swing, 7, 25, 4, this.skin);
 
             // 4. 머리 및 액세서리
-            drawCube(0, -45, 45, 45, 12, this.skin);
+            drawCube(0, -30, 32, 32, 10, this.skin);
             
-            // 선글라스 (Mr. Lee)
-            if(this.type === 'lee') {
-                drawCube(-10, -55, 15, 8, 4, "#222222"); 
-                drawCube(10, -55, 15, 8, 4, "#222222");
-                drawCube(0, -25, 20, 4, 2, "#f1c40f"); // 금목걸이
-            }
-
-            // 5. 얼굴 & 머리카락
-            this.drawFace();
-            for(let i=0; i<this.hairCount; i++) {
-                drawCube((i-(this.hairCount-1)/2)*12, -75, 8, 8, 8, "#000000");
-            }
-
             // 이름표
-            ctx.fillStyle = "#fff"; ctx.fillRect(-15, -5, 30, 12);
-            ctx.fillStyle = "#000"; ctx.font = "bold 9px Arial"; ctx.textAlign="center";
-            ctx.fillText(this.name, 0, 5);
+            ctx.fillStyle = "#fff"; ctx.fillRect(-12, -2, 24, 10);
+            ctx.fillStyle = "#000"; ctx.font = "bold 8px Arial"; ctx.textAlign="center";
+            ctx.fillText(this.name, 0, 6);
+
+            // 머리카락
+            for(let i=0; i<this.hairCount; i++) {
+                drawCube((i-(this.hairCount-1)/2)*8, -52, 6, 6, 6, "#000000");
+            }
 
             ctx.restore();
-        }
-
-        drawFace() {
-            ctx.fillStyle = "#333";
-            let ey = -45;
-            if(this.shock > 0) {
-                ctx.fillRect(-12, ey, 6, 6); ctx.fillRect(6, ey, 6, 6);
-                ctx.fillRect(-8, ey+15, 16, 3);
-            } else if(this.hairCount >= 3) {
-                ctx.fillRect(-12, ey-2, 6, 2); ctx.fillRect(6, ey-2, 6, 2); // 웃는 눈
-                ctx.fillRect(-10, ey+12, 20, 6); // 크게 웃음
-            } else {
-                ctx.fillRect(-12, ey, 6, 6); ctx.fillRect(6, ey, 6, 6);
-                ctx.fillRect(-6, ey+14, 12, 3);
-            }
         }
 
         update() {
             if(this.shock > 0) this.shock--;
             if(!this.isDragging) {
-                if(this.x<40 || this.x>canvas.width-40) { this.dx*=-0.7; this.shock=15; playSound(200); }
-                if(this.y<100 || this.y>canvas.height-60) { this.dy*=-0.7; this.shock=15; playSound(200); }
-                this.x+=this.dx; this.y+=this.dy;
-                this.dx*=0.99; this.dy*=0.99;
+                // 벽 충돌 (속도 줄이고 소리 오류 방지)
+                if(this.x < 30 || this.x > canvas.width - 30) {
+                    this.dx *= -0.6; this.x = this.x < 30 ? 30 : canvas.width - 30;
+                    playSound(200);
+                }
+                if(this.y < 60 || this.y > canvas.height - 40) {
+                    this.dy *= -0.6; this.y = this.y < 60 ? 60 : canvas.height - 40;
+                    playSound(200);
+                }
+                this.x += this.dx; this.y += this.dy;
+                this.dx *= 0.98; this.dy *= 0.98;
             }
+
+            // 아이템 충돌 확인
+            items.forEach(item => {
+                if(item.active && Math.hypot(this.x - item.x, this.y - item.y) < 30) {
+                    item.active = false;
+                    this.isSpinning = true;
+                    playSound(800, 'sine'); // 띵~ 소리
+                    setTimeout(() => item.reset(), 5000); // 5초 뒤 재생성
+                }
+            });
         }
     }
 
     const players = [
-        new Character("Mr. Lee", 80, 200, "#ffe0bd", 'lee'),
-        new Character("Mr. KIM", canvas.width-80, 200, "#ffe0bd", 'kim'),
-        new Character("Mr. SONG", canvas.width/2, canvas.height-150, "#ffe0bd", 'song')
+        new Character("Lee", 100, 200, 'lee'),
+        new Character("Kim", canvas.width-100, 200, 'kim'),
+        new Character("Song", canvas.width/2, canvas.height-150, 'song')
     ];
 
     function loop() {
-        ctx.clearRect(0,0,canvas.width,canvas.height);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // 캐릭터간 충돌
         for(let i=0; i<3; i++) {
             for(let j=i+1; j<3; j++) {
                 let p1=players[i], p2=players[j];
-                if(Math.hypot(p1.x-p2.x, p1.y-p2.y) < 70) {
-                    if(Math.hypot(p1.dx, p1.dy) > Math.hypot(p2.dx, p2.dy)+0.5 && p2.hairCount>0) {
-                        p1.hairCount+=p2.hairCount; p2.hairCount=0; playSound(600);
-                    } else if(Math.hypot(p2.dx, p2.dy) > Math.hypot(p1.dx, p1.dy)+0.5 && p1.hairCount>0) {
-                        p2.hairCount+=p1.hairCount; p1.hairCount=0; playSound(600);
+                if(Math.hypot(p1.x-p2.x, p1.y-p2.y) < 50) {
+                    if(Math.hypot(p1.dx, p1.dy) > Math.hypot(p2.dx, p2.dy)+0.3 && p2.hairCount>0) {
+                        p1.hairCount+=p2.hairCount; p2.hairCount=0; playSound(500);
+                    } else if(Math.hypot(p2.dx, p2.dy) > Math.hypot(p1.dx, p1.dy)+0.3 && p1.hairCount>0) {
+                        p2.hairCount+=p1.hairCount; p1.hairCount=0; playSound(500);
                     }
                     [p1.dx, p2.dx] = [p2.dx, p1.dx]; [p1.dy, p2.dy] = [p2.dy, p1.dy];
-                    p1.shock=15; p2.shock=15;
                 }
             }
         }
+
+        items.forEach(item => item.draw());
         players.forEach(p => { p.update(); p.draw(); });
         requestAnimationFrame(loop);
     }
@@ -214,13 +236,13 @@
     let target=null, lastP={x:0, y:0};
     canvas.addEventListener('touchstart', e => {
         const t=e.touches[0];
-        players.forEach(p => { if(Math.hypot(t.clientX-p.x, t.clientY-p.y)<60) {target=p; p.isDragging=true;} });
+        players.forEach(p => { if(Math.hypot(t.clientX-p.x, t.clientY-p.y)<40) {target=p; p.isDragging=true;} });
         lastP={x:t.clientX, y:t.clientY};
     });
     canvas.addEventListener('touchmove', e => {
         if(target) {
             const t=e.touches[0];
-            target.dx=(t.clientX-lastP.x)*0.4; target.dy=(t.clientY-lastP.y)*0.4;
+            target.dx=(t.clientX-lastP.x)*0.3; target.dy=(t.clientY-lastP.y)*0.3;
             target.x=t.clientX; target.y=t.clientY;
             lastP={x:t.clientX, y:t.clientY};
         }
