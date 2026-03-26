@@ -3,29 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>세 얼간이 모바일 게임</title>
+    <title>세 얼간이 액션 게임</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
             background-color: #e0e0e0;
             font-family: sans-serif;
-            touch-action: none; /* 브라우저 기본 터치 액션 방지 */
+            touch-action: none; /* 모바일 브라우저 기본 터치 액션(스크롤 등) 방지 */
+            user-select: none; /* 텍스트 선택 방지 */
+            -webkit-user-select: none;
         }
         canvas {
             display: block;
         }
+        /* 워터마크 스타일 */
         #watermark {
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%) rotate(-30deg);
             font-size: 10vw;
-            color: rgba(0, 0, 0, 0.07);
+            color: rgba(0, 0, 0, 0.06);
             pointer-events: none;
             z-index: 0;
             white-space: nowrap;
         }
+        /* 시작 안내 메시지 */
         #msg {
             position: fixed;
             top: 20px;
@@ -34,20 +38,21 @@
             color: #555;
             font-weight: bold;
             pointer-events: none;
+            z-index: 10;
         }
     </style>
 </head>
 <body>
 
 <div id="watermark">세 얼간이 세 얼간이</div>
-<div id="msg">화면을 터치하면 소리가 활성화됩니다!</div>
+<div id="msg">화면을 터치하면 소리와 게임이 활성화됩니다!</div>
 <canvas id="gameCanvas"></canvas>
 
 <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
 
-    // 화면 크기 설정
+    // 화면 크기 설정 및 리사이즈 대응
     function resize() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
@@ -55,156 +60,301 @@
     window.addEventListener('resize', resize);
     resize();
 
-    // 오디오 시스템 개선
+    // --- 오디오 시스템 (모바일 최적화) ---
     let audioCtx = null;
     function initAudio() {
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            document.getElementById('msg').style.display = 'none';
+            const msgEl = document.getElementById('msg');
+            if(msgEl) msgEl.style.display = 'none'; // 터치하면 메시지 숨김
         }
         if (audioCtx.state === 'suspended') audioCtx.resume();
     }
 
     function playBounceSound() {
         if (!audioCtx) return;
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        
-        osc.type = 'triangle'; // 조금 더 부드러운 소리
-        osc.frequency.setValueAtTime(300 + Math.random() * 200, audioCtx.currentTime);
-        
-        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-        
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.1);
+        try {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            
+            osc.type = 'triangle'; // 부드러운 띵 소리
+            osc.frequency.setValueAtTime(350 + Math.random() * 200, audioCtx.currentTime);
+            
+            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        } catch (e) {
+            console.log("오디오 재생 오류:", e);
+        }
     }
 
+    // --- 캐릭터 클래스 ---
     class Character {
         constructor(name, x, y, color) {
             this.name = name;
             this.x = x;
             this.y = y;
-            this.width = 60;  // 판정 너비
-            this.height = 100; // 판정 높이
-            this.dx = (Math.random() - 0.5) * 4;
-            this.dy = (Math.random() - 0.5) * 4;
+            // 물리 및 판정 크기
+            this.radius = 35; // 충돌 판정용 반지름
+            this.dx = (Math.random() - 0.5) * 5; // 초기 속도
+            this.dy = (Math.random() - 0.5) * 5;
             this.color = color;
+            
+            // 상태 변수
             this.isDragging = false;
+            this.isShocked = false; // 부딪혔는지 여부
+            this.shockTimer = 0;   // 찡그리는 시간 타이머
+            this.animAngle = 0;    // 팔다리 애니메이션용 각도
         }
 
-        draw() {
+        draw(time) {
             ctx.save();
             ctx.translate(this.x, this.y);
 
-            // 1. 머리
-            ctx.fillStyle = "#ffe0bd"; // 살구색
-            ctx.beginPath();
-            ctx.arc(0, -35, 15, 0, Math.PI * 2);
-            ctx.fill();
+            // 팔다리 애니메이션 계산 (움직일 때만)
+            let armAngle = 0;
+            let legAngle = 0;
+            if (!this.isDragging && (Math.abs(this.dx) > 0.1 || Math.abs(this.dy) > 0.1)) {
+                // 시간과 속도에 비례하여 움직임
+                this.animAngle += 0.2; 
+                armAngle = Math.sin(this.animAngle) * 0.5; // +-0.5 라디안
+                legAngle = Math.cos(this.animAngle) * 0.4;
+            }
+
+            // 1. 팔다리 그리기 (몸통 뒤에 위치)
+            ctx.strokeStyle = "#333";
+            ctx.lineWidth = 5;
+            ctx.lineCap = "round";
+            
+            // 왼팔
+            ctx.save();
+            ctx.translate(-15, -15);
+            ctx.rotate(armAngle);
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-10, 25); ctx.stroke();
+            ctx.restore();
+
+            // 오른팔
+            ctx.save();
+            ctx.translate(15, -15);
+            ctx.rotate(-armAngle);
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(10, 25); ctx.stroke();
+            ctx.restore();
+
+            // 왼다리
+            ctx.save();
+            ctx.translate(-10, 20);
+            ctx.rotate(-legAngle);
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-5, 28); ctx.stroke();
+            ctx.restore();
+
+            // 오른다리
+            ctx.save();
+            ctx.translate(10, 20);
+            ctx.rotate(legAngle);
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(5, 28); ctx.stroke();
+            ctx.restore();
 
             // 2. 몸통 (옷)
             ctx.fillStyle = this.color;
-            ctx.fillRect(-15, -20, 30, 40);
+            ctx.beginPath();
+            ctx.moveTo(-18, -20);
+            ctx.lineTo(18, -20);
+            ctx.lineTo(15, 25);
+            ctx.lineTo(-15, 25);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = "#555";
+            ctx.lineWidth = 1;
+            ctx.stroke();
 
             // 3. 이름표 (가슴 위치)
             ctx.fillStyle = "white";
-            ctx.fillRect(-18, -10, 36, 12);
+            ctx.fillRect(-22, -8, 44, 16);
+            ctx.strokeStyle = "black";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(-22, -8, 44, 16);
             ctx.fillStyle = "black";
-            ctx.font = "bold 8px Arial";
+            ctx.font = "bold 10px Arial";
             ctx.textAlign = "center";
-            ctx.fillText(this.name, 0, -1);
+            ctx.textBaseline = "middle";
+            ctx.fillText(this.name, 0, 1);
 
-            // 4. 팔다리 (간단한 선)
-            ctx.strokeStyle = "#333";
-            ctx.lineWidth = 4;
-            ctx.lineCap = "round";
-            
-            // 팔
+            // 4. 머리
+            ctx.fillStyle = "#ffe0bd"; // 살구색
             ctx.beginPath();
-            ctx.moveTo(-15, -15); ctx.lineTo(-25, 5); // 왼팔
-            ctx.moveTo(15, -15); ctx.lineTo(25, 5);  // 오른팔
-            // 다리
-            ctx.moveTo(-8, 20); ctx.lineTo(-12, 45); // 왼다리
-            ctx.moveTo(8, 20); ctx.lineTo(12, 45);   // 오른다리
+            ctx.arc(0, -40, 18, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = "#555";
+            ctx.stroke();
+
+            // 5. 얼굴 표현 (표정 변화 핵심)
+            ctx.strokeStyle = "#333";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            if (this.isShocked) {
+                // 찡그린 눈 (> <)
+                // 왼쪽 눈
+                ctx.moveTo(-10, -45); ctx.lineTo(-4, -41);
+                ctx.moveTo(-10, -41); ctx.lineTo(-4, -45);
+                // 오른쪽 눈
+                ctx.moveTo(4, -45); ctx.lineTo(10, -41);
+                ctx.moveTo(4, -41); ctx.lineTo(10, -45);
+                // 꾹 다문 입
+                ctx.moveTo(-5, -32); ctx.lineTo(5, -32);
+            } else {
+                // 평소 눈웃음 (^^)
+                // 왼쪽 눈
+                ctx.moveTo(-11, -42); ctx.quadraticCurveTo(-7, -47, -3, -42);
+                // 오른쪽 눈
+                ctx.moveTo(3, -42); ctx.quadraticCurveTo(7, -47, 11, -42);
+                // 웃는 입
+                ctx.moveTo(-6, -34); ctx.quadraticCurveTo(0, -29, 6, -34);
+            }
             ctx.stroke();
 
             ctx.restore();
         }
 
         update() {
+            // 찡그리는 타이머 관리
+            if (this.isShocked) {
+                this.shockTimer--;
+                if (this.shockTimer <= 0) {
+                    this.isShocked = false;
+                }
+            }
+
             if (!this.isDragging) {
-                // 벽 충돌 (좌우)
-                if (this.x - 30 < 0 || this.x + 30 > canvas.width) {
+                // 벽 충돌 검사 (좌우)
+                if (this.x - this.radius < 0 || this.x + this.radius > canvas.width) {
                     this.dx *= -1;
-                    this.x = this.x < 30 ? 30 : canvas.width - 30;
+                    this.x = this.x < this.radius ? this.radius : canvas.width - this.radius;
+                    this.triggerShock();
                     playBounceSound();
                 }
-                // 벽 충돌 (상하)
-                if (this.y - 50 < 0 || this.y + 50 > canvas.height) {
+                // 벽 충돌 검사 (상하)
+                if (this.y - this.radius - 20 < 0 || this.y + this.radius + 10 > canvas.height) { // 머리와 다리 고려
                     this.dy *= -1;
-                    this.y = this.y < 50 ? 50 : canvas.height - 50;
+                    this.y = this.y < this.radius + 20 ? this.radius + 20 : canvas.height - this.radius - 10;
+                    this.triggerShock();
                     playBounceSound();
                 }
 
+                // 위치 업데이트
                 this.x += this.dx;
                 this.y += this.dy;
+
+                // 마찰력 (조금씩 느려짐)
+                this.dx *= 0.995;
+                this.dy *= 0.995;
             }
+        }
+
+        // 부딪혔을 때 표정 변화 트리거
+        triggerShock() {
+            this.isShocked = true;
+            this.shockTimer = 30; // 약 0.5초 (60fps 기준) 동안 찡그림
         }
     }
 
+    // 캐릭터 생성
     const players = [
-        new Character("Mr. Lee", 100, 100, "#3498db"),
-        new Character("Mr. KIM", 200, 200, "#e74c3c"),
-        new Character("Mr. SONG", 150, 300, "#2ecc71")
+        new Character("Mr. Lee", 100, 200, "#3498db"), // 파랑
+        new Character("Mr. KIM", canvas.width - 100, 200, "#e74c3c"), // 빨강
+        new Character("Mr. SONG", canvas.width / 2, canvas.height - 200, "#2ecc71") // 초록
     ];
 
+    // --- 캐릭터 간 충돌 물리 ---
     function checkCollision() {
         for (let i = 0; i < players.length; i++) {
             for (let j = i + 1; j < players.length; j++) {
                 let p1 = players[i];
                 let p2 = players[j];
-                let dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
                 
-                if (dist < 60) { // 캐릭터 간 거리 기반 충돌
-                    // 속도 교환
-                    [p1.dx, p2.dx] = [p2.dx, p1.dx];
-                    [p1.dy, p2.dy] = [p2.dy, p1.dy];
+                // 피타고라스 정리로 거리 계산
+                let dx = p2.x - p1.x;
+                let dy = p2.y - p1.y;
+                let dist = Math.hypot(dx, dy);
+                
+                // 충돌했는지 확인 (두 반지름의 합)
+                const minDist = p1.radius + p2.radius;
+                if (dist < minDist) {
+                    // 1. 표정 변화 및 소리
+                    p1.triggerShock();
+                    p2.triggerShock();
+                    if(!p1.isDragging && !p2.isDragging) playBounceSound();
+
+                    // 2. 물리적인 튕김 (탄성 충돌)
+                    // 충돌 각도
+                    let angle = Math.atan2(dy, dx);
                     
-                    // 겹침 방지
-                    let angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-                    p1.x -= Math.cos(angle) * 2;
-                    p1.y -= Math.sin(angle) * 2;
-                    p2.x += Math.cos(angle) * 2;
-                    p2.y += Math.sin(angle) * 2;
+                    // 현재 속도의 충돌 방향 성분 계산
+                    let v1 = Math.sqrt(p1.dx * p1.dx + p1.dy * p1.dy);
+                    let v2 = Math.sqrt(p2.dx * p2.dx + p2.dy * p2.dy);
+                    let d1 = Math.atan2(p1.dy, p1.dx);
+                    let d2 = Math.atan2(p2.dy, p2.dx);
+
+                    let vx1 = v1 * Math.cos(d1 - angle);
+                    let vy1 = v1 * Math.sin(d1 - angle);
+                    let vx2 = v2 * Math.cos(d2 - angle);
+                    let vy2 = v2 * Math.sin(d2 - angle);
+
+                    // 충돌 후 속도 (서로 바꿈)
+                    let final_vx1 = vx2;
+                    let final_vx2 = vx1;
+
+                    // 원래 좌표계로 복원
+                    p1.dx = Math.cos(angle) * final_vx1 + Math.cos(angle + Math.PI/2) * vy1;
+                    p1.dy = Math.sin(angle) * final_vx1 + Math.sin(angle + Math.PI/2) * vy1;
+                    p2.dx = Math.cos(angle) * final_vx2 + Math.cos(angle + Math.PI/2) * vy2;
+                    p2.dy = Math.sin(angle) * final_vx2 + Math.sin(angle + Math.PI/2) * vy2;
+
+                    // 3. 겹침 방지 (서로 밀어냄)
+                    let overlap = minDist - dist;
+                    p1.x -= Math.cos(angle) * overlap / 2;
+                    p1.y -= Math.sin(angle) * overlap / 2;
+                    p2.x += Math.cos(angle) * overlap / 2;
+                    p2.y += Math.sin(angle) * overlap / 2;
                 }
             }
         }
     }
 
-    function loop() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        checkCollision();
+    // --- 메인 게임 루프 ---
+    function loop(time) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height); // 화면 지우기
+        checkCollision(); // 충돌 처리
         players.forEach(p => {
-            p.update();
-            p.draw();
+            p.update(); // 상태 업데이트
+            p.draw(time);   // 그리기
         });
-        requestAnimationFrame(loop);
+        requestAnimationFrame(loop); // 다음 프레임 요청
     }
 
-    // 모바일 터치 이벤트
-    let target = null;
+    // --- 모바일 터치 이벤트 처리 ---
+    let target = null; // 현재 드래그 중인 캐릭터
+    let lastTouchX = 0;
+    let lastTouchY = 0;
 
     canvas.addEventListener('touchstart', (e) => {
-        initAudio(); // 첫 터치 시 오디오 활성화
+        initAudio(); // 첫 터치 시 오디오 context 활성화 (모바일 필수)
         const touch = e.touches[0];
+        lastTouchX = touch.clientX;
+        lastTouchY = touch.clientY;
+
+        // 터치한 위치에 캐릭터가 있는지 확인
         players.forEach(p => {
-            if (Math.hypot(touch.clientX - p.x, touch.clientY - p.y) < 50) {
+            // 머리부터 다리까지 판정 영역을 조금 넓힘
+            if (Math.hypot(touch.clientX - p.x, touch.clientY - p.y) < p.radius + 10) {
                 target = p;
                 p.isDragging = true;
+                p.dx = 0; // 잡는 순간 멈춤
+                p.dy = 0;
             }
         });
     }, false);
@@ -212,21 +362,31 @@
     canvas.addEventListener('touchmove', (e) => {
         if (target) {
             const touch = e.touches[0];
+            // 드래그 속도 계산을 위해 터치 이동 거리 기록
+            target.dx = touch.clientX - lastTouchX;
+            target.dy = touch.clientY - lastTouchY;
+            
             target.x = touch.clientX;
             target.y = touch.clientY;
+            
+            lastTouchX = touch.clientX;
+            lastTouchY = touch.clientY;
         }
-        e.preventDefault(); // 스크롤 방지
+        e.preventDefault(); // 모바일 브라우저 스크롤 방지
     }, { passive: false });
 
     canvas.addEventListener('touchend', () => {
         if (target) {
             target.isDragging = false;
-            target.dx = (Math.random() - 0.5) * 10; // 던지는 효과
-            target.dy = (Math.random() - 0.5) * 10;
+            // 던지는 효과: 마지막 드래그 속도를 유지하되 너무 빠르지 않게 제한
+            const speedLimit = 15;
+            target.dx = Math.max(-speedLimit, Math.min(speedLimit, target.dx));
+            target.dy = Math.max(-speedLimit, Math.min(speedLimit, target.dy));
             target = null;
         }
     }, false);
 
+    // 게임 시작
     loop();
 </script>
 </body>
