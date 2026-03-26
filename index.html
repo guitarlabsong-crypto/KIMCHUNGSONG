@@ -2,72 +2,85 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>세 얼간이 핑퐁 게임</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>세 얼간이 모바일 게임</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #f0f0f0;
-            font-family: 'Arial', sans-serif;
-            user-select: none;
+            background-color: #e0e0e0;
+            font-family: sans-serif;
+            touch-action: none; /* 브라우저 기본 터치 액션 방지 */
         }
         canvas {
             display: block;
-            background: #e8e8e8;
-            border: 10px solid #8d6e63; /* 나무 느낌의 벽 */
         }
-        /* 워터마크 스타일 */
         #watermark {
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%) rotate(-30deg);
-            font-size: 80px;
-            color: rgba(0, 0, 0, 0.05);
+            font-size: 10vw;
+            color: rgba(0, 0, 0, 0.07);
             pointer-events: none;
+            z-index: 0;
             white-space: nowrap;
-            z-index: 100;
         }
-        #info {
+        #msg {
             position: fixed;
-            bottom: 10px;
-            left: 10px;
-            background: rgba(255,255,255,0.7);
-            padding: 5px 10px;
-            border-radius: 5px;
-            font-size: 12px;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            color: #555;
+            font-weight: bold;
+            pointer-events: none;
         }
     </style>
 </head>
 <body>
 
-<div id="watermark">세 얼간이 세 얼간이 세 얼간이</div>
-<div id="info">마우스로 캐릭터를 드래그해보세요! (화면 클릭 시 소리 활성화)</div>
+<div id="watermark">세 얼간이 세 얼간이</div>
+<div id="msg">화면을 터치하면 소리가 활성화됩니다!</div>
 <canvas id="gameCanvas"></canvas>
 
 <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
 
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    // 화면 크기 설정
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
 
-    // 사운드 생성을 위한 오디오 컨텍스트
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-    function playHitSound() {
+    // 오디오 시스템 개선
+    let audioCtx = null;
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            document.getElementById('msg').style.display = 'none';
+        }
         if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function playBounceSound() {
+        if (!audioCtx) return;
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(440 + Math.random() * 440, audioCtx.currentTime);
+        
+        osc.type = 'triangle'; // 조금 더 부드러운 소리
+        osc.frequency.setValueAtTime(300 + Math.random() * 200, audioCtx.currentTime);
+        
         gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        
         osc.connect(gain);
         gain.connect(audioCtx.destination);
+        
         osc.start();
-        osc.stop(audioCtx.currentTime + 0.2);
+        osc.stop(audioCtx.currentTime + 0.1);
     }
 
     class Character {
@@ -75,141 +88,146 @@
             this.name = name;
             this.x = x;
             this.y = y;
-            this.radius = 40;
-            this.dx = (Math.random() - 0.5) * 6;
-            this.dy = (Math.random() - 0.5) * 6;
+            this.width = 60;  // 판정 너비
+            this.height = 100; // 판정 높이
+            this.dx = (Math.random() - 0.5) * 4;
+            this.dy = (Math.random() - 0.5) * 4;
             this.color = color;
             this.isDragging = false;
         }
 
         draw() {
-            // 몸체 (졸라맨 스타일의 귀여운 캐릭터)
+            ctx.save();
+            ctx.translate(this.x, this.y);
+
+            // 1. 머리
+            ctx.fillStyle = "#ffe0bd"; // 살구색
             ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.arc(0, -35, 15, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 2. 몸통 (옷)
             ctx.fillStyle = this.color;
-            ctx.fill();
-            ctx.strokeStyle = "#333";
-            ctx.lineWidth = 2;
-            ctx.stroke();
-            ctx.closePath();
+            ctx.fillRect(-15, -20, 30, 40);
 
-            // 이름표 (가슴 위치)
+            // 3. 이름표 (가슴 위치)
             ctx.fillStyle = "white";
-            ctx.fillRect(this.x - 30, this.y - 10, 60, 20);
-            ctx.strokeStyle = "black";
-            ctx.strokeRect(this.x - 30, this.y - 10, 60, 20);
-
+            ctx.fillRect(-18, -10, 36, 12);
             ctx.fillStyle = "black";
-            ctx.font = "bold 12px Arial";
+            ctx.font = "bold 8px Arial";
             ctx.textAlign = "center";
-            ctx.fillText(this.name, this.x, this.y + 4);
+            ctx.fillText(this.name, 0, -1);
 
-            // 눈 (방향감)
-            ctx.fillStyle = "black";
+            // 4. 팔다리 (간단한 선)
+            ctx.strokeStyle = "#333";
+            ctx.lineWidth = 4;
+            ctx.lineCap = "round";
+            
+            // 팔
             ctx.beginPath();
-            ctx.arc(this.x - 10, this.y - 20, 3, 0, Math.PI * 2);
-            ctx.arc(this.x + 10, this.y - 20, 3, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.moveTo(-15, -15); ctx.lineTo(-25, 5); // 왼팔
+            ctx.moveTo(15, -15); ctx.lineTo(25, 5);  // 오른팔
+            // 다리
+            ctx.moveTo(-8, 20); ctx.lineTo(-12, 45); // 왼다리
+            ctx.moveTo(8, 20); ctx.lineTo(12, 45);   // 오른다리
+            ctx.stroke();
+
+            ctx.restore();
         }
 
         update() {
             if (!this.isDragging) {
-                // 벽 충돌 검사
-                if (this.x + this.radius > canvas.width || this.x - this.radius < 0) {
-                    this.dx = -this.dx;
-                    playHitSound();
+                // 벽 충돌 (좌우)
+                if (this.x - 30 < 0 || this.x + 30 > canvas.width) {
+                    this.dx *= -1;
+                    this.x = this.x < 30 ? 30 : canvas.width - 30;
+                    playBounceSound();
                 }
-                if (this.y + this.radius > canvas.height || this.y - this.radius < 0) {
-                    this.dy = -this.dy;
-                    playHitSound();
+                // 벽 충돌 (상하)
+                if (this.y - 50 < 0 || this.y + 50 > canvas.height) {
+                    this.dy *= -1;
+                    this.y = this.y < 50 ? 50 : canvas.height - 50;
+                    playBounceSound();
                 }
 
                 this.x += this.dx;
                 this.y += this.dy;
             }
-            this.draw();
         }
     }
 
-    const characters = [
-        new Character("Mr. Lee", 100, 100, "#ffadad"),
-        new Character("Mr. KIM", 300, 200, "#9bf6ff"),
-        new Character("Mr. SONG", 500, 400, "#caffbf")
+    const players = [
+        new Character("Mr. Lee", 100, 100, "#3498db"),
+        new Character("Mr. KIM", 200, 200, "#e74c3c"),
+        new Character("Mr. SONG", 150, 300, "#2ecc71")
     ];
 
-    // 캐릭터 간 충돌 처리
-    function handleCollisions() {
-        for (let i = 0; i < characters.length; i++) {
-            for (let j = i + 1; j < characters.length; j++) {
-                const c1 = characters[i];
-                const c2 = characters[j];
-                const dist = Math.hypot(c1.x - c2.x, c1.y - c2.y);
-
-                if (dist < c1.radius + c2.radius) {
-                    // 충돌 시 튕겨나가기 (단순 속도 반전)
-                    const tempDx = c1.dx;
-                    const tempDy = c1.dy;
-                    c1.dx = c2.dx;
-                    c1.dy = c2.dy;
-                    c2.dx = tempDx;
-                    c2.dy = tempDy;
+    function checkCollision() {
+        for (let i = 0; i < players.length; i++) {
+            for (let j = i + 1; j < players.length; j++) {
+                let p1 = players[i];
+                let p2 = players[j];
+                let dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+                
+                if (dist < 60) { // 캐릭터 간 거리 기반 충돌
+                    // 속도 교환
+                    [p1.dx, p2.dx] = [p2.dx, p1.dx];
+                    [p1.dy, p2.dy] = [p2.dy, p1.dy];
                     
                     // 겹침 방지
-                    const overlap = c1.radius + c2.radius - dist;
-                    const nx = (c1.x - c2.x) / dist;
-                    const ny = (c1.y - c2.y) / dist;
-                    c1.x += nx * overlap / 2;
-                    c1.y += ny * overlap / 2;
-                    c2.x -= nx * overlap / 2;
-                    c2.y -= ny * overlap / 2;
+                    let angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+                    p1.x -= Math.cos(angle) * 2;
+                    p1.y -= Math.sin(angle) * 2;
+                    p2.x += Math.cos(angle) * 2;
+                    p2.y += Math.sin(angle) * 2;
                 }
             }
         }
     }
 
-    function animate() {
+    function loop() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        handleCollisions();
-        characters.forEach(c => c.update());
-        requestAnimationFrame(animate);
+        checkCollision();
+        players.forEach(p => {
+            p.update();
+            p.draw();
+        });
+        requestAnimationFrame(loop);
     }
 
-    // 마우스 이벤트 처리
-    let activeChar = null;
+    // 모바일 터치 이벤트
+    let target = null;
 
-    canvas.addEventListener('mousedown', (e) => {
-        characters.forEach(c => {
-            const dist = Math.hypot(e.clientX - c.x, e.clientY - c.y);
-            if (dist < c.radius) {
-                c.isDragging = true;
-                activeChar = c;
+    canvas.addEventListener('touchstart', (e) => {
+        initAudio(); // 첫 터치 시 오디오 활성화
+        const touch = e.touches[0];
+        players.forEach(p => {
+            if (Math.hypot(touch.clientX - p.x, touch.clientY - p.y) < 50) {
+                target = p;
+                p.isDragging = true;
             }
         });
-    });
+    }, false);
 
-    window.addEventListener('mousemove', (e) => {
-        if (activeChar) {
-            activeChar.x = e.clientX;
-            activeChar.y = e.clientY;
+    canvas.addEventListener('touchmove', (e) => {
+        if (target) {
+            const touch = e.touches[0];
+            target.x = touch.clientX;
+            target.y = touch.clientY;
         }
-    });
+        e.preventDefault(); // 스크롤 방지
+    }, { passive: false });
 
-    window.addEventListener('mouseup', () => {
-        if (activeChar) {
-            activeChar.isDragging = false;
-            // 던지는 효과를 위해 랜덤 속도 부여
-            activeChar.dx = (Math.random() - 0.5) * 8;
-            activeChar.dy = (Math.random() - 0.5) * 8;
-            activeChar = null;
+    canvas.addEventListener('touchend', () => {
+        if (target) {
+            target.isDragging = false;
+            target.dx = (Math.random() - 0.5) * 10; // 던지는 효과
+            target.dy = (Math.random() - 0.5) * 10;
+            target = null;
         }
-    });
+    }, false);
 
-    window.addEventListener('resize', () => {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    });
-
-    animate();
+    loop();
 </script>
 </body>
 </html>
