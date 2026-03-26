@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>세얼간이: 링 위의 응원전</title>
+    <title>세얼간이: 링 위의 응원전 (폭탄 개편)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #dfe6e9; font-family: sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
         canvas { display: block; position: relative; z-index: 1; }
@@ -33,7 +33,6 @@
     window.addEventListener('resize', resize);
     resize();
 
-    // --- 사운드 시스템 ---
     function playSound(freq, type = 'square', gainVal = 0.02) {
         try {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -47,7 +46,6 @@
         } catch (e) {}
     }
 
-    // --- 공통 입체 블록 그리기 (사이즈 축소 대응) ---
     function drawCube(x, y, w, h, d, color, rotation = 0) {
         ctx.save(); ctx.translate(x, y); ctx.rotate(rotation);
         const adjust = (col, amt) => {
@@ -59,41 +57,27 @@
         ctx.fillStyle = color; ctx.fillRect(-w/2,-h/2,w,h); ctx.restore();
     }
 
-    // --- 복싱 링 그리기 (가변) ---
     function drawBoxingRing() {
         const offset = 25; const ropeX = offset; const ropeY = offset;
-        
-        // 1. 링 포스트 (모서리 기둥 - 사이즈 축소)
         const postS = 12; const postD = 6;
-        drawCube(ropeX, ropeY, postS, postS*1.5, postD, "#ff4757"); // 빨강 (좌상)
-        drawCube(canvas.width-ropeX, ropeY, postS, postS*1.5, postD, "#ff4757"); // 빨강 (우상)
-        drawCube(ropeX, canvas.height-ropeY, postS, postS*1.5, postD, "#2e86de"); // 파랑 (좌하)
-        drawCube(canvas.width-ropeX, canvas.height-ropeY, postS, postS*1.5, postD, "#2e86de"); // 파랑 (우하)
-
-        // 2. 링 로프 (가변 - 더 얇게)
+        drawCube(ropeX, ropeY, postS, postS*1.5, postD, "#ff4757");
+        drawCube(canvas.width-ropeX, ropeY, postS, postS*1.5, postD, "#ff4757");
+        drawCube(ropeX, canvas.height-ropeY, postS, postS*1.5, postD, "#2e86de");
+        drawCube(canvas.width-ropeX, canvas.height-ropeY, postS, postS*1.5, postD, "#2e86de");
         ctx.lineWidth = 3; ctx.lineCap = "round";
-        const drawRope = (y, col) => {
-            ctx.strokeStyle = col; ctx.beginPath();
-            ctx.moveTo(ropeX, y); ctx.lineTo(canvas.width - ropeX, y); ctx.stroke();
-        };
-        const drawSideRope = (x, col) => {
-            ctx.strokeStyle = col; ctx.beginPath();
-            ctx.moveTo(x, ropeY); ctx.lineTo(x, canvas.height - ropeY); ctx.stroke();
-        };
-        // 상하 로프
+        const drawRope = (y, col) => { ctx.strokeStyle = col; ctx.beginPath(); ctx.moveTo(ropeX, y); ctx.lineTo(canvas.width - ropeX, y); ctx.stroke(); };
+        const drawSideRope = (x, col) => { ctx.strokeStyle = col; ctx.beginPath(); ctx.moveTo(x, ropeY); ctx.lineTo(x, canvas.height - ropeY); ctx.stroke(); };
         drawRope(ropeY, "#ff4757"); drawRope(ropeY + 12, "#ff4757");
         drawRope(canvas.height - ropeY, "#2e86de"); drawRope(canvas.height - ropeY - 12, "#2e86de");
-        // 좌우 로프
         drawSideRope(ropeX, "#ff4757"); drawSideRope(ropeX + 12, "#ff4757");
         drawSideRope(canvas.width - ropeX, "#2e86de"); drawSideRope(canvas.width - ropeX - 12, "#2e86de");
     }
 
-    // --- 아이템 클래스 (사이즈 축소) ---
     class Item {
         constructor(type) { this.type = type; this.reset(); }
         reset() {
             this.x = Math.random() * (canvas.width - 80) + 40;
-            this.y = Math.random() * (canvas.height - 120) + 60;
+            this.y = Math.random() * (canvas.height - 180) + 60;
             this.active = true;
         }
         draw() {
@@ -103,111 +87,64 @@
             else if(this.type === 'grapes') this.drawGrapes();
             else this.drawBomb();
         }
-        drawBanana() {
-            ctx.save(); ctx.translate(this.x, this.y); const col = "#f1c40f";
-            drawCube(-8, 0, 12, 3, 2, col, -0.3); drawCube(0, 1, 12, 3, 2, col, 0); drawCube(8, 0, 12, 3, 2, col, 0.3); drawCube(4, -4, 9, 2, 2, col, 0.6);
-            ctx.restore();
-        }
-        drawCoconut() {
-            ctx.save(); ctx.translate(this.x, this.y); drawCube(0, 0, 22, 22, 11, "#6d4c41");
-            ctx.fillStyle = "#fff"; ctx.fillRect(-6, -6, 2, 2); ctx.fillRect(4, -1, 2, 2); ctx.fillRect(-1, 5, 2, 2);
-            ctx.restore();
-        }
-        drawGrapes() {
-            ctx.save(); ctx.translate(this.x, this.y); const col = "#8e44ad"; const s = 5;
-            drawCube(0,-6,s,s,s/2,col); drawCube(-5,-1,s,s,s/2,col); drawCube(5,-1,s,s,s/2,col); drawCube(-7,3,s,s,s/2,col); drawCube(0,3,s,s,s/2,col); drawCube(7,3,s,s,s/2,col); drawCube(-5,8,s,s,s/2,col); drawCube(5,8,s,s,s/2,col); drawCube(0,12,s,s,s/2,col);
-            ctx.restore();
-        }
-        drawBomb() {
-            ctx.save(); ctx.translate(this.x, this.y); drawCube(0, 0, 18, 18, 9, "#2d3436");
-            drawCube(0, -11, 5, 5, 2, "#fab1a0"); ctx.strokeStyle = "#e17055"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, -13); ctx.lineTo(0, -19); ctx.stroke();
-            ctx.restore();
-        }
+        drawBanana() { ctx.save(); ctx.translate(this.x, this.y); const col = "#f1c40f"; drawCube(-8, 0, 12, 3, 2, col, -0.3); drawCube(0, 1, 12, 3, 2, col, 0); drawCube(8, 0, 12, 3, 2, col, 0.3); drawCube(4, -4, 9, 2, 2, col, 0.6); ctx.restore(); }
+        drawCoconut() { ctx.save(); ctx.translate(this.x, this.y); drawCube(0, 0, 22, 22, 11, "#6d4c41"); ctx.fillStyle = "#fff"; ctx.fillRect(-6, -6, 2, 2); ctx.fillRect(4, -1, 2, 2); ctx.fillRect(-1, 5, 2, 2); ctx.restore(); }
+        drawGrapes() { ctx.save(); ctx.translate(this.x, this.y); const col = "#8e44ad"; const s = 5; drawCube(0,-6,s,s,s/2,col); drawCube(-5,-1,s,s,s/2,col); drawCube(5,-1,s,s,s/2,col); drawCube(-7,3,s,s,s/2,col); drawCube(0,3,s,s,s/2,col); drawCube(7,3,s,s,s/2,col); drawCube(-5,8,s,s,s/2,col); drawCube(5,8,s,s,s/2,col); drawCube(0,12,s,s,s/2,col); ctx.restore(); }
+        drawBomb() { ctx.save(); ctx.translate(this.x, this.y); drawCube(0, 0, 18, 18, 9, "#2d3436"); drawCube(0, -11, 5, 5, 2, "#fab1a0"); ctx.strokeStyle = "#e17055"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, -13); ctx.lineTo(0, -19); ctx.stroke(); ctx.restore(); }
     }
 
     class Projectile {
-        constructor(x, y, target, owner) {
-            this.x = x; this.y = y; this.target = target; this.owner = owner;
-            this.speed = 5; this.active = true;
-        }
+        constructor(x, y, target, owner) { this.x = x; this.y = y; this.target = target; this.owner = owner; this.speed = 5; this.active = true; }
         update() {
             let dx = this.target.x - this.x, dy = this.target.y - this.y;
             let dist = Math.hypot(dx, dy);
-            if(dist < 20) {
-                this.target.hitShock = 40; this.target.dx += (dx/dist)*4; this.target.dy += (dy/dist)*4;
-                if(this.target.hairCount > 0) { this.target.hairCount--; this.owner.hairCount++; }
-                this.active = false; playSound(300);
-            }
+            if(dist < 20) { this.target.hitShock = 40; this.target.dx += (dx/dist)*4; this.target.dy += (dy/dist)*4; if(this.target.hairCount > 0) { this.target.hairCount--; this.owner.hairCount++; } this.active = false; playSound(300); }
             this.x += (dx/dist) * this.speed; this.y += (dy/dist) * this.speed;
         }
         draw() { drawCube(this.x, this.y, 10, 10, 5, "#4e342e"); }
     }
 
-    // --- 응원하는 여자 캐릭터 클래스 (신규 - 더 작게) ---
     class Cheerer {
-        constructor(x, y, hairCol) {
-            this.x = x; this.y = y; this.hairCol = hairCol;
-            this.anim = Math.random() * 10; this.radius = 15;
-        }
+        constructor(x, y, hairCol) { this.x = x; this.y = y; this.hairCol = hairCol; this.anim = Math.random() * 10; }
         draw() {
             ctx.save(); ctx.translate(this.x, this.y);
-            let wave = Math.sin(this.anim += 0.1) * 6; // 응원 애니메이션
-
-            // 다리/팔
+            let wave = Math.sin(this.anim += 0.1) * 6;
             drawCube(-6, 20 + wave*0.5, 6, 12, 3, "#333333"); drawCube(6, 20 - wave*0.5, 6, 12, 3, "#333333");
-            drawCube(-15, 5 + wave, 5, 18, 3, "#ffe0bd"); drawCube(15, 5 - wave, 5, 18, 3, "#ffe0bd"); // 팔 흔들기
-
-            // 몸통 (분홍 티셔츠)
+            drawCube(-15, 5 + wave, 5, 18, 3, "#ffe0bd"); drawCube(15, 5 - wave, 5, 18, 3, "#ffe0bd");
             drawCube(0, 5, 22, 25, 6, "#ff9f43");
-
-            // 머리 & 머리카락 (입체)
-            drawCube(0, -22, 25, 25, 8, "#ffe0bd"); // 얼굴
-            const s = 5; const d = 5; // 머리카락 블록 크기
-            if(this.hairCol === 'gold') { // 금발 (양갈래)
-                for(let i=0; i<3; i++) drawCube((i-1)*7, -34, s, s, d, "#f1c40f");
-                drawCube(-14, -18, s, 12, d, "#f1c40f"); drawCube(14, -18, s, 12, d, "#f1c40f");
-            } else if(this.hairCol === 'pink') { // 핑크 (숏컷)
-                for(let i=0; i<4; i++) drawCube((i-1.5)*7, -34, s, s, d, "#ff9f43");
-                drawCube(-14, -22, s, 8, d, "#ff9f43"); drawCube(14, -22, s, 8, d, "#ff9f43");
-            } else { // 브라운 (포니테일)
-                for(let i=0; i<3; i++) drawCube((i-1)*7, -34, s, s, d, "#6d4c41");
-                drawCube(0, -42, s, s, d, "#6d4c41"); drawCube(0, -38, s, s*2, d, "#6d4c41"); // 묶은 머리
-            }
-
-            // 얼굴 (픽셀)
-            ctx.fillStyle = "#333"; ctx.fillRect(-8, -25, 3, 3); ctx.fillRect(5, -25, 3, 3);
-            ctx.fillRect(-5, -17, 10, 2);
-
+            drawCube(0, -22, 25, 25, 8, "#ffe0bd");
+            const s = 5; const d = 5;
+            if(this.hairCol === 'gold') { for(let i=0; i<3; i++) drawCube((i-1)*7, -34, s, s, d, "#f1c40f"); drawCube(-14, -18, s, 12, d, "#f1c40f"); drawCube(14, -18, s, 12, d, "#f1c40f"); }
+            else if(this.hairCol === 'pink') { for(let i=0; i<4; i++) drawCube((i-1.5)*7, -34, s, s, d, "#ff9f43"); drawCube(-14, -22, s, 8, d, "#ff9f43"); drawCube(14, -22, s, 8, d, "#ff9f43"); }
+            else { for(let i=0; i<3; i++) drawCube((i-1)*7, -34, s, s, d, "#6d4c41"); drawCube(0, -42, s, s, d, "#6d4c41"); drawCube(0, -38, s, s*2, d, "#6d4c41"); }
+            ctx.fillStyle = "#333"; ctx.fillRect(-8, -25, 3, 3); ctx.fillRect(5, -25, 3, 3); ctx.fillRect(-5, -17, 10, 2);
             ctx.restore();
         }
     }
 
-    // --- 얼간이 캐릭터 클래스 (사이즈 대폭 축소) ---
     class Character {
         constructor(name, x, y, type) {
             this.name = name; this.x = x; this.y = y; this.type = type;
             this.dx = (Math.random()-0.5)*1.5; this.dy = (Math.random()-0.5)*1.5;
             this.skin = "#ffe0bd"; this.hairCount = 1; this.isDragging = false;
             this.anim = 0; this.spinAngle = 0; this.isSpinning = false; this.hitShock = 0;
-            this.radius = 20; // 충돌 반지름 축소
         }
         draw() {
             ctx.save(); ctx.translate(this.x, this.y);
             if (this.isSpinning) { this.spinAngle += 0.4; ctx.rotate(this.spinAngle); if(this.spinAngle > Math.PI*4){this.isSpinning=false; this.spinAngle=0;} }
             let swing = (Math.hypot(this.dx, this.dy) > 0.1 && !this.isDragging) ? Math.sin(this.anim += 0.2) * 8 : 0;
-            drawCube(-6, 20 + swing, 6, 12, 3, "#333333"); drawCube(6, 20 - swing, 6, 12, 3, "#333333"); // 다리
-            drawCube(-15, 5 - swing, 5, 18, 3, this.skin); drawCube(15, 5 + swing, 5, 18, 3, this.skin); // 팔
+            drawCube(-6, 20 + swing, 6, 12, 3, "#333333"); drawCube(6, 20 - swing, 6, 12, 3, "#333333");
+            drawCube(-15, 5 - swing, 5, 18, 3, this.skin); drawCube(15, 5 + swing, 5, 18, 3, this.skin);
             let bodyCol = this.type === 'lee' ? "#3498db" : (this.type === 'kim' ? "#e84118" : "#2ecc71");
-            drawCube(0, 5, 22, 25, 6, bodyCol); // 몸통
-            ctx.fillStyle = "#fff"; ctx.fillRect(-9, -2, 18, 8); ctx.fillStyle = "#000"; ctx.font = "bold 8px Arial"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(this.name, 0, 2); // 이름표
-            let headCol = this.hitShock > 0 ? "#3498db" : this.skin; drawCube(0, -22, 25, 25, 8, headCol); // 머리
-            ctx.fillStyle = this.hitShock > 0 ? "#fff" : "#333"; ctx.fillRect(-8, -25, 3, 3); ctx.fillRect(5, -25, 3, 3); ctx.fillRect(-4, -17, 8, 2); // 얼굴
-            this.drawAdvancedHair(); // 입체 머리카락
+            drawCube(0, 5, 22, 25, 6, bodyCol);
+            ctx.fillStyle = "#fff"; ctx.fillRect(-9, -2, 18, 8); ctx.fillStyle = "#000"; ctx.font = "bold 8px Arial"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(this.name, 0, 2);
+            let headCol = this.hitShock > 0 ? "#3498db" : this.skin; drawCube(0, -22, 25, 25, 8, headCol);
+            ctx.fillStyle = this.hitShock > 0 ? "#fff" : "#333"; ctx.fillRect(-8, -25, 3, 3); ctx.fillRect(5, -25, 3, 3); ctx.fillRect(-4, -17, 8, 2);
+            this.drawAdvancedHair();
             ctx.restore();
         }
         drawAdvancedHair() {
-            const col = "#000000"; const s = 6; const d = 6;
-            const topY = -38; const sideY = -22;
+            const col = "#000000"; const s = 6; const d = 6; const topY = -38; const sideY = -22;
             for(let i=0; i<this.hairCount; i++) {
                 if(i < 3) drawCube((i-1)*7, topY, s, s, d, col);
                 else if(i < 5) drawCube(-15, sideY + (i-3)*7, s, s, d, col);
@@ -220,7 +157,7 @@
             if(!this.isDragging) {
                 const margin = 35;
                 if(this.x < margin || this.x > canvas.width - margin) { this.dx *= -0.7; this.x = this.x < margin ? margin : canvas.width - margin; }
-                if(this.y < margin + 25 || this.y > canvas.height - margin - 60) { this.dy *= -0.7; this.y = this.y < margin + 25 ? margin + 25 : canvas.height - margin - 60; } // 응원 캐릭터 자리 고려
+                if(this.y < margin + 25 || this.y > canvas.height - margin - 60) { this.dy *= -0.7; this.y = this.y < margin + 25 ? margin + 25 : canvas.height - margin - 60; }
                 this.x += this.dx; this.y += this.dy;
                 if(Math.hypot(this.dx, this.dy) < 0.5) { this.dx += (Math.random()-0.5)*0.1; this.dy += (Math.random()-0.5)*0.1; }
                 this.dx *= 0.99; this.dy *= 0.99;
@@ -237,7 +174,10 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         drawBoxingRing();
         projectiles = projectiles.filter(p => p.active); projectiles.forEach(p => { p.update(); p.draw(); });
-        items.forEach(item => { item.draw(); players.forEach(p => { if(item.active && Math.hypot(p.x - item.x, p.y - item.y) < 25) { item.active = false; playSound(500, 'sine'); if(item.type === 'banana') p.isSpinning = true; else if(item.type === 'coconut') { let target = players.filter(pl => pl !== p).sort((a,b) => Math.hypot(p.x-a.x, p.y-a.y) - Math.hypot(p.x-b.x, p.y-b.y))[0]; projectiles.push(new Projectile(p.x, p.y, target, p)); } else if(item.type === 'grapes') { p.hairCount++; playSound(800, 'square'); } else { playSound(100, 'triangle', 0.1); players.forEach(pl => pl.hairCount = 1); } setTimeout(() => item.reset(), 5000); } }); });
+        items.forEach(item => { item.draw(); players.forEach(p => { if(item.active && Math.hypot(p.x - item.x, p.y - item.y) < 25) { item.active = false; playSound(500, 'sine'); if(item.type === 'banana') p.isSpinning = true; else if(item.type === 'coconut') { let target = players.filter(pl => pl !== p).sort((a,b) => Math.hypot(p.x-a.x, p.y-a.y) - Math.hypot(p.x-b.x, p.y-b.y))[0]; projectiles.push(new Projectile(p.x, p.y, target, p)); } else if(item.type === 'grapes') { p.hairCount++; playSound(800, 'square'); } else { 
+            // 폭탄 효과: 머리카락이 모두 빠짐 (0개)
+            playSound(150, 'triangle', 0.1); p.hairCount = 0; 
+        } setTimeout(() => item.reset(), 5000); } }); });
         for(let i=0; i<3; i++) { for(let j=i+1; j<3; j++) { let p1=players[i], p2=players[j]; if(Math.hypot(p1.x-p2.x, p1.y-p2.y) < 40) { let s1 = Math.hypot(p1.dx, p1.dy), s2 = Math.hypot(p2.dx, p2.dy); if(s1 > s2 + 0.5 && p2.hairCount > 0) { p1.hairCount++; p2.hairCount--; playSound(800, 'square'); } else if(s2 > s1 + 0.5 && p1.hairCount > 0) { p2.hairCount++; p1.hairCount--; playSound(800, 'square'); } [p1.dx, p2.dx] = [p2.dx, p1.dx]; [p1.dy, p2.dy] = [p2.dy, p1.dy]; let ang = Math.atan2(p2.y-p1.y, p2.x-p1.x); p1.x -= Math.cos(ang) * 4; p1.y -= Math.sin(ang) * 4; p2.x += Math.cos(ang) * 4; p2.y += Math.sin(ang) * 4; } } }
         cheerers.forEach(c => c.draw()); players.forEach(p => { p.update(); p.draw(); });
         requestAnimationFrame(loop);
