@@ -3,54 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>세 얼간이: 머리카락 쟁탈전</title>
+    <title>세 얼간이: 머리카락 대전 Pro</title>
     <style>
         body {
-            margin: 0;
-            overflow: hidden;
-            background-color: #d1d8e0;
-            font-family: 'Apple SD Gothic Neo', sans-serif;
+            margin: 0; overflow: hidden;
+            background: radial-gradient(circle, #fdfbfb 0%, #ebedee 100%);
+            font-family: 'Pretendard', sans-serif;
             touch-action: none;
-            user-select: none;
-            -webkit-user-select: none;
         }
-        canvas { display: block; }
         #watermark {
-            position: fixed;
-            top: 50%;
-            left: 50%;
+            position: fixed; top: 50%; left: 50%;
             transform: translate(-50%, -50%) rotate(-30deg);
-            font-size: 12vw;
-            color: rgba(0, 0, 0, 0.04);
-            pointer-events: none;
-            z-index: 0;
-            white-space: nowrap;
+            font-size: 15vw; color: rgba(0, 0, 0, 0.03);
+            pointer-events: none; white-space: nowrap; font-weight: 900;
         }
         #ui {
-            position: fixed;
-            top: 20px;
-            width: 100%;
-            text-align: center;
-            pointer-events: none;
-            z-index: 10;
+            position: fixed; top: 30px; width: 100%;
+            text-align: center; pointer-events: none;
         }
         .status {
-            display: inline-block;
-            background: rgba(255,255,255,0.8);
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-weight: bold;
-            color: #333;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            background: rgba(255,255,255,0.9);
+            padding: 12px 25px; border-radius: 50px;
+            font-weight: bold; color: #333;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+            border: 1px solid rgba(0,0,0,0.05);
         }
     </style>
 </head>
 <body>
 
-<div id="watermark">세 얼간이 세 얼간이</div>
-<div id="ui">
-    <div class="status" id="statusMsg">빠른 속도로 부딪혀서 머리카락을 뺏으세요!</div>
-</div>
+<div id="watermark">세 얼간이</div>
+<div id="ui"><div class="status" id="statusMsg">빠르게 드래그해서 머리카락을 뺏으세요!</div></div>
 <canvas id="gameCanvas"></canvas>
 
 <script>
@@ -64,9 +47,8 @@
     window.addEventListener('resize', resize);
     resize();
 
-    // 오디오 설정
     let audioCtx = null;
-    function playSound(freq, type = 'triangle') {
+    function playSound(freq, type = 'sine') {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         if (audioCtx.state === 'suspended') audioCtx.resume();
         const osc = audioCtx.createOscillator();
@@ -74,227 +56,190 @@
         osc.type = type;
         osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
         gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.start();
-        osc.stop(audioCtx.currentTime + 0.1);
+        osc.stop(audioCtx.currentTime + 0.15);
     }
 
     class Character {
-        constructor(name, x, y, color) {
+        constructor(name, x, y, mainColor, darkColor) {
             this.name = name;
-            this.x = x;
-            this.y = y;
-            this.radius = 35;
-            this.dx = (Math.random() - 0.5) * 6;
-            this.dy = (Math.random() - 0.5) * 6;
-            this.color = color;
-            
-            this.hairCount = 1; // 시작할 때 머리카락 1개
+            this.x = x; this.y = y;
+            this.dx = (Math.random() - 0.5) * 4;
+            this.dy = (Math.random() - 0.5) * 4;
+            this.mainColor = mainColor;
+            this.darkColor = darkColor;
+            this.hairCount = 1;
             this.isDragging = false;
             this.shockTimer = 0;
-            this.animAngle = 0;
-        }
-
-        get speed() {
-            return Math.sqrt(this.dx * this.dx + this.dy * this.dy);
+            this.anim = 0;
         }
 
         draw() {
             ctx.save();
             ctx.translate(this.x, this.y);
 
-            // 팔다리 애니메이션
-            let walk = (!this.isDragging && this.speed > 0.5) ? Math.sin(this.animAngle += 0.2) * 0.5 : 0;
-
-            // 팔다리
-            ctx.strokeStyle = "#333";
-            ctx.lineWidth = 5;
-            ctx.lineCap = "round";
-            // 왼팔/오른팔
-            ctx.beginPath(); ctx.moveTo(-15, -15); ctx.lineTo(-25 + walk*10, 10); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(15, -15); ctx.lineTo(25 - walk*10, 10); ctx.stroke();
-            // 왼다리/오른다리
-            ctx.beginPath(); ctx.moveTo(-10, 20); ctx.lineTo(-15 - walk*15, 45); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(10, 20); ctx.lineTo(15 + walk*15, 45); ctx.stroke();
-
-            // 몸통
-            ctx.fillStyle = this.color;
+            // 1. 발밑 그림자 (고급스러움의 핵심)
             ctx.beginPath();
-            ctx.moveTo(-20, -20); ctx.lineTo(20, -20); ctx.lineTo(15, 25); ctx.lineTo(-15, 25);
-            ctx.closePath(); ctx.fill();
-            
-            // 이름표
-            ctx.fillStyle = "white";
-            ctx.fillRect(-22, -8, 44, 16);
-            ctx.fillStyle = "black";
-            ctx.font = "bold 10px Arial";
-            ctx.textAlign = "center";
-            ctx.fillText(this.name, 0, 4);
+            ctx.ellipse(0, 50, 30, 10, 0, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(0,0,0,0.1)";
+            ctx.fill();
 
-            // 머리
+            let walk = (Math.abs(this.dx) + Math.abs(this.dy) > 0.5 && !this.isDragging) ? Math.sin(this.anim += 0.2) : 0;
+
+            // 2. 팔다리 (선이 아닌 면으로 처리)
             ctx.fillStyle = "#ffe0bd";
-            ctx.beginPath(); ctx.arc(0, -40, 20, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = "#555"; ctx.lineWidth = 1; ctx.stroke();
+            // 왼다리/오른다리
+            ctx.fillRect(-12, 20 + (walk * 5), 8, 25);
+            ctx.fillRect(4, 20 - (walk * 5), 8, 25);
 
-            // --- 머리카락 그리기 ---
-            ctx.strokeStyle = "#000";
-            ctx.lineWidth = 2;
+            // 3. 몸통 (그라데이션 추가)
+            let bodyGrad = ctx.createLinearGradient(-20, -20, 20, 25);
+            bodyGrad.addColorStop(0, this.mainColor);
+            bodyGrad.addColorStop(1, this.darkColor);
+            ctx.fillStyle = bodyGrad;
+            ctx.beginPath();
+            ctx.roundRect(-22, -25, 44, 50, 10);
+            ctx.fill();
+
+            // 4. 이름표
+            ctx.fillStyle = "rgba(255,255,255,0.9)";
+            ctx.fillRect(-18, -5, 36, 14);
+            ctx.fillStyle = "#333";
+            ctx.font = "bold 9px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(this.name, 0, 6);
+
+            // 5. 머리 (입체감 있는 구체)
+            let headGrad = ctx.createRadialGradient(-5, -50, 2, 0, -45, 20);
+            headGrad.addColorStop(0, "#fff5ea");
+            headGrad.addColorStop(1, "#ffe0bd");
+            ctx.fillStyle = headGrad;
+            ctx.beginPath();
+            ctx.arc(0, -45, 22, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 6. 머리카락 (부드러운 곡선)
+            ctx.strokeStyle = "#222";
+            ctx.lineWidth = 3;
+            ctx.lineCap = "round";
             for(let i=0; i<this.hairCount; i++) {
+                let ox = (i - (this.hairCount-1)/2) * 10;
                 ctx.beginPath();
-                // 머리카락 개수에 따라 위치 분산
-                let ox = (i - (this.hairCount-1)/2) * 8;
-                ctx.moveTo(ox, -60);
-                ctx.bezierCurveTo(ox-5, -70, ox+10, -75, ox+5, -85);
+                ctx.moveTo(ox, -65);
+                ctx.bezierCurveTo(ox+10, -80, ox-10, -85, ox+5, -95);
                 ctx.stroke();
             }
 
-            // --- 표정 변화 ---
-            ctx.strokeStyle = "#333";
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            if (this.shockTimer > 0) { // 충돌 시 찡그림
-                ctx.moveTo(-10, -45); ctx.lineTo(-4, -41); ctx.moveTo(-10, -41); ctx.lineTo(-4, -45);
-                ctx.moveTo(4, -45); ctx.lineTo(10, -41); ctx.moveTo(4, -41); ctx.lineTo(10, -45);
-                ctx.moveTo(-5, -30); ctx.lineTo(5, -30);
-            } else if (this.hairCount >= 3) { // 승자: 아주 크게 웃음
-                ctx.arc(-8, -45, 2, 0, Math.PI*2); ctx.stroke(); // 눈
-                ctx.beginPath(); ctx.arc(8, -45, 2, 0, Math.PI*2); ctx.stroke();
-                ctx.beginPath(); ctx.arc(0, -35, 8, 0, Math.PI); ctx.stroke(); // 큰 입
-            } else if (this.hairCount === 0) { // 패자: ㅠ ㅠ 표정
-                ctx.moveTo(-10, -50); ctx.lineTo(-10, -40); ctx.moveTo(-12, -45); ctx.lineTo(-8, -45);
-                ctx.moveTo(10, -50); ctx.lineTo(10, -40); ctx.moveTo(8, -45); ctx.lineTo(12, -45);
-                ctx.moveTo(-5, -32); ctx.quadraticCurveTo(0, -37, 5, -32); // 시무룩 입
-            } else { // 평소 눈웃음
-                ctx.moveTo(-11, -42); ctx.quadraticCurveTo(-7, -47, -3, -42);
-                ctx.moveTo(3, -42); ctx.quadraticCurveTo(7, -47, 11, -42);
-                ctx.moveTo(-6, -34); ctx.quadraticCurveTo(0, -29, 6, -34);
-            }
-            ctx.stroke();
+            // 7. 얼굴 (정교한 눈동자)
+            this.drawFace();
 
             ctx.restore();
+        }
+
+        drawFace() {
+            ctx.lineWidth = 2;
+            ctx.lineCap = "round";
+            if (this.shockTimer > 0) { // 찡그림
+                ctx.strokeStyle = "#555";
+                ctx.beginPath();
+                ctx.moveTo(-12, -52); ctx.lineTo(-4, -48); ctx.moveTo(-12, -48); ctx.lineTo(-4, -52);
+                ctx.moveTo(12, -52); ctx.lineTo(4, -48); ctx.moveTo(12, -48); ctx.lineTo(4, -52);
+                ctx.stroke();
+            } else if (this.hairCount >= 3) { // 승자의 웃음
+                ctx.fillStyle = "#333";
+                ctx.beginPath(); ctx.arc(-8, -50, 3, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(8, -50, 3, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = "#ff4757";
+                ctx.beginPath(); ctx.arc(0, -40, 8, 0.1 * Math.PI, 0.9 * Math.PI); ctx.stroke();
+            } else if (this.hairCount === 0) { // 패자의 슬픔
+                ctx.strokeStyle = "#3498db";
+                ctx.beginPath(); ctx.moveTo(-10, -55); ctx.lineTo(-10, -45); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(10, -55); ctx.lineTo(10, -45); ctx.stroke();
+                ctx.strokeStyle = "#555";
+                ctx.beginPath(); ctx.moveTo(-6, -38); ctx.quadraticCurveTo(0, -43, 6, -38); ctx.stroke();
+            } else { // 기본 눈웃음
+                ctx.strokeStyle = "#333";
+                ctx.beginPath(); ctx.moveTo(-12, -48); ctx.quadraticCurveTo(-8, -54, -4, -48); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(12, -48); ctx.quadraticCurveTo(8, -54, 4, -48); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(-5, -40); ctx.quadraticCurveTo(0, -35, 5, -40); ctx.stroke();
+            }
         }
 
         update() {
             if (this.shockTimer > 0) this.shockTimer--;
             if (!this.isDragging) {
-                if (this.x - this.radius < 0 || this.x + this.radius > canvas.width) {
-                    this.dx *= -1;
-                    this.x = this.x < this.radius ? this.radius : canvas.width - this.radius;
-                    playSound(400);
-                }
-                if (this.y - 60 < 0 || this.y + 50 > canvas.height) {
-                    this.dy *= -1;
-                    this.y = this.y < 60 ? 60 : canvas.height - 50;
-                    playSound(400);
-                }
-                this.x += this.dx;
-                this.y += this.dy;
-                this.dx *= 0.99; this.dy *= 0.99; // 마찰
+                if (this.x < 30 || this.x > canvas.width - 30) { this.dx *= -1; this.shockTimer=15; playSound(300); }
+                if (this.y < 80 || this.y > canvas.height - 60) { this.dy *= -1; this.shockTimer=15; playSound(300); }
+                this.x += this.dx; this.y += this.dy;
+                this.dx *= 0.99; this.dy *= 0.99;
             }
         }
     }
 
     const players = [
-        new Character("Mr. Lee", 100, 200, "#3498db"),
-        new Character("Mr. KIM", 200, 400, "#e74c3c"),
-        new Character("Mr. SONG", 300, 200, "#2ecc71")
+        new Character("Mr. Lee", 100, 200, "#4facfe", "#00f2fe"),
+        new Character("Mr. KIM", 200, 400, "#ff9a9e", "#fecfef"),
+        new Character("Mr. SONG", 300, 200, "#667eea", "#764ba2")
     ];
 
-    function resolveCollision() {
+    function checkCollisions() {
         for (let i = 0; i < players.length; i++) {
             for (let j = i + 1; j < players.length; j++) {
-                let p1 = players[i];
-                let p2 = players[j];
+                let p1 = players[i]; let p2 = players[j];
                 let dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
-                
-                if (dist < p1.radius + p2.radius) {
-                    // 1. 머리카락 뺏기 판정 (속도가 더 빠른 사람이 뺏음)
-                    if (p1.speed > p2.speed + 1 && p2.hairCount > 0) {
-                        p1.hairCount += p2.hairCount;
-                        p2.hairCount = 0;
-                        playSound(800, 'square'); // 뺏는 소리
-                    } else if (p2.speed > p1.speed + 1 && p1.hairCount > 0) {
-                        p2.hairCount += p1.hairCount;
-                        p1.hairCount = 0;
-                        playSound(800, 'square');
-                    } else {
-                        playSound(300); // 단순 충돌
+                if (dist < 65) {
+                    let s1 = Math.hypot(p1.dx, p1.dy);
+                    let s2 = Math.hypot(p2.dx, p2.dy);
+                    if (s1 > s2 + 1 && p2.hairCount > 0) {
+                        p1.hairCount += p2.hairCount; p2.hairCount = 0; playSound(600, 'square');
+                    } else if (s2 > s1 + 1 && p1.hairCount > 0) {
+                        p2.hairCount += p1.hairCount; p1.hairCount = 0; playSound(600, 'square');
                     }
-
-                    p1.shockTimer = 20;
-                    p2.shockTimer = 20;
-
-                    // 물리적 튕김
-                    let angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-                    let overlap = (p1.radius + p2.radius) - dist;
-                    p1.x -= Math.cos(angle) * overlap / 2;
-                    p1.y -= Math.sin(angle) * overlap / 2;
-                    p2.x += Math.cos(angle) * overlap / 2;
-                    p2.y += Math.sin(angle) * overlap / 2;
-
-                    [p1.dx, p2.dx] = [p2.dx * 1.2, p1.dx * 1.2];
-                    [p1.dy, p2.dy] = [p2.dy * 1.2, p1.dy * 1.2];
+                    [p1.dx, p2.dx] = [p2.dx * 1.5, p1.dx * 1.5];
+                    [p1.dy, p2.dy] = [p2.dy * 1.5, p1.dy * 1.5];
+                    p1.shockTimer = 20; p2.shockTimer = 20;
                 }
             }
         }
     }
 
-    function gameLoop() {
+    function drawLoop() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        resolveCollision();
-        
+        checkCollisions();
+        players.forEach(p => { p.update(); p.draw(); });
         let winner = players.find(p => p.hairCount >= 3);
-        if(winner) {
-            document.getElementById('statusMsg').innerText = `🎉 ${winner.name} 승리! 머리카락을 모두 모았습니다!`;
-        } else {
-            document.getElementById('statusMsg').innerText = `머리카락 개수 - Lee:${players[0].hairCount} KIM:${players[1].hairCount} SONG:${players[2].hairCount}`;
-        }
-
-        players.forEach(p => {
-            p.update();
-            p.draw();
-        });
-        requestAnimationFrame(gameLoop);
+        if(winner) document.getElementById('statusMsg').innerHTML = `👑 <b>${winner.name}</b> 승리!`;
+        requestAnimationFrame(drawLoop);
     }
 
-    // 터치 이벤트
-    let activeP = null;
-    let lastT = {x:0, y:0};
+    let target = null;
+    let lastPos = {x:0, y:0};
 
     canvas.addEventListener('touchstart', e => {
-        if (!audioCtx) playSound(100); 
+        if(!audioCtx) playSound(100);
         const t = e.touches[0];
         players.forEach(p => {
-            if (Math.hypot(t.clientX - p.x, t.clientY - p.y) < 50) {
-                activeP = p;
-                p.isDragging = true;
-            }
+            if(Math.hypot(t.clientX - p.x, t.clientY - p.y) < 50) { target = p; p.isDragging = true; }
         });
-        lastT = {x: t.clientX, y: t.clientY};
+        lastPos = {x:t.clientX, y:t.clientY};
     });
 
     canvas.addEventListener('touchmove', e => {
-        if (activeP) {
+        if(target) {
             const t = e.touches[0];
-            activeP.dx = (t.clientX - lastT.x) * 0.8;
-            activeP.dy = (t.clientY - lastT.y) * 0.8;
-            activeP.x = t.clientX;
-            activeP.y = t.clientY;
-            lastT = {x: t.clientX, y: t.clientY};
+            target.dx = t.clientX - lastPos.x; target.dy = t.clientY - lastPos.y;
+            target.x = t.clientX; target.y = t.clientY;
+            lastPos = {x:t.clientX, y:t.clientY};
         }
         e.preventDefault();
-    }, {passive: false});
+    }, {passive:false});
 
-    canvas.addEventListener('touchend', () => {
-        if (activeP) {
-            activeP.isDragging = false;
-            activeP = null;
-        }
-    });
+    canvas.addEventListener('touchend', () => { if(target){ target.isDragging = false; target = null; } });
 
-    gameLoop();
+    drawLoop();
 </script>
 </body>
 </html>
